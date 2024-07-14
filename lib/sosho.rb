@@ -2,7 +2,7 @@ module Sosho
   require 'rubygems'
   require 'fileutils'
   require 'nokogiri'
-  require 'rmagick'
+  require 'mini_magick'
 
   NIDS_DOMAIN = 'www.nids.mod.go.jp'
   DOWNLOAD_DIR = 'downloads'
@@ -106,15 +106,16 @@ module Sosho
 
       logger.p 'creating pdf...'
 
-      r = Magick::ImageList.new
-      files.each do |file|
-        r.push(Magick::Image.read(file)[0])
+      MiniMagick.convert do |convert|
+        files.each do |file|
+          convert << file
+        end
+        convert << pdf_path
       end
-      r.write pdf_path
     end
 
     def pdf_path
-      "#{download_dir}/#{filename}.pdf"
+      @pdf_path ||= "#{download_dir}/#{filename}.pdf"
     end
   end
 end
