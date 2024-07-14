@@ -9,6 +9,7 @@ class Soshoget < Thor
   method_option :pdf, type: :boolean, aliases: '-p', default: false, desc: 'create pdf'
   method_option :all, type: :boolean, aliases: '-a', default: false, desc: 'get all soshos'
   method_option :verbose, type: :boolean, aliases: '-v', default: false, desc: 'verbose output'
+  method_option :overwrite, type: :boolean, aliases: '-o', default: false, desc: 'overwrite existing image'
 
   OpenSSL::SSL::SSLContext::DEFAULT_PARAMS[:options] |= OpenSSL::SSL::OP_LEGACY_SERVER_CONNECT
 
@@ -23,7 +24,7 @@ class Soshoget < Thor
     connection.use_ssl = true
     connection.start do |handler|
       volumes.each do |vol|
-        volume = Sosho::Volume.new(num: vol, handler:, logger:)
+        volume = Sosho::Volume.new(num: vol, handler:, logger:, overwrite: options['overwrite'])
         volume.get
         wait
         next unless options['pdf']

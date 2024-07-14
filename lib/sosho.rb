@@ -20,16 +20,17 @@ module Sosho
   end
 
   class Volume
-    attr_reader :num, :handler, :logger, :volume_str, :viewer_path, :first_page, :last_page, :title
+    attr_reader :num, :handler, :logger, :volume_str, :viewer_path, :first_page, :last_page, :title, :overwrite
     attr_accessor :files, :download_dir
 
     WAIT_SEC = 0.05
 
-    def initialize(num:, handler:, logger:, download_dir: DOWNLOAD_DIR)
+    def initialize(num:, handler:, logger:, download_dir: DOWNLOAD_DIR, overwrite: false)
       @num = num
       @handler = handler
       @logger = logger
       @download_dir = download_dir
+      @overwrite = overwrite
       @volume_str = num.to_s.rjust(3, '0')
       @viewer_path = "/military_history_search/SoshoView?kanno=#{volume_str}"
       @files = []
@@ -52,13 +53,14 @@ module Sosho
       filename = "#{volume_str}_#{num.to_s.rjust(3, '0')}.jpg"
       image_path = "/military_history_search/GetImage?s=#{volume_str}/#{filename}"
       file_to_save = File.join(download_dir, volume_str, filename)
+      files << file_to_save
+      return if !overwrite && File.exist?(file_to_save)
 
       logger.p "downloading #{filename}..."
       File.open(file_to_save, 'wb') do |f|
         f.write handler.get(image_path, headers).body
       end
 
-      files << file_to_save
     end
 
     def create_dir
@@ -88,23 +90,31 @@ module Sosho
   end
 
   class PDF
-    attr_reader :filename, :files, :download_dir, :logger
+    attr_reader :filename, :files, :download_dir, :logger, :overwrite
 
-    def initialize(filename:, files:, logger:, download_dir: DOWNLOAD_DIR)
+    def initialize(filename:, files:, logger:, download_dir: DOWNLOAD_DIR, overwrite: false)
       @filename = filename
       @files = files
-      @download_dir = download_dir
       @logger = logger
+      @download_dir = download_dir
+      @overwrite = overwrite
     end
 
     def create
+      return if files.empty?
+      return if !overwrite && File.exist?(pdf_path)
+
       logger.p 'creating pdf...'
 
       r = Magick::ImageList.new
       files.each do |file|
         r.push(Magick::Image.read(file)[0])
       end
-      r.write "#{download_dir}/#{filename}.pdf"
+      r.write pdf_path
+    end
+
+    def pdf_path
+      "#{download_dir}/#{filename}.pdf"
     end
   end
 end
