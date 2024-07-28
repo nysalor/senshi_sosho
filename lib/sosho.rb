@@ -5,7 +5,6 @@ module Sosho
   require 'mini_magick'
 
   NIDS_DOMAIN = 'www.nids.mod.go.jp'
-  DOWNLOAD_DIR = 'downloads'
 
   class Logger
     attr_reader :verbose
@@ -20,17 +19,15 @@ module Sosho
   end
 
   class Volume
-    attr_reader :num, :handler, :logger, :volume_str, :viewer_path, :first_page, :last_page, :title, :overwrite
-    attr_accessor :files, :download_dir
+    attr_reader :volume_str, :viewer_path, :first_page, :last_page, :title
+    attr_accessor :files
 
     WAIT_SEC = 0.05
 
-    def initialize(num:, handler:, logger:, download_dir: DOWNLOAD_DIR, overwrite: false)
-      @num = num
-      @handler = handler
-      @logger = logger
-      @download_dir = download_dir
-      @overwrite = overwrite
+    def initialize(config) #num:, handler:, logger:, download_dir: DOWNLOAD_DIR, overwrite: false)
+      %i[num handler logger overwrite download_dir].each do |key|
+        self.class.define_method(key) { config[key] }
+      end
       @volume_str = num.to_s.rjust(3, '0')
       @viewer_path = "/military_history_search/SoshoView?kanno=#{volume_str}"
       @files = []
@@ -88,34 +85,84 @@ module Sosho
       sleep WAIT_SEC
     end
   end
-
   class PDF
-    attr_reader :filename, :files, :download_dir, :logger, :overwrite
-
-    def initialize(filename:, files:, logger:, download_dir: DOWNLOAD_DIR, overwrite: false)
-      @filename = filename
-      @files = files
-      @logger = logger
-      @download_dir = download_dir
-      @overwrite = overwrite
+    def initialize(config)
+      %i[logger overwrite volume_str files title download_dir].each do |key|
+        self.class.define_method(key) { config[key] }
+      end
     end
 
     def create
-      return if files.empty?
-      return if !overwrite && File.exist?(pdf_path)
+      return if images.empty?
+      return if overwrite && File.exist?(pdf_path)
 
       logger.p 'creating pdf...'
 
       MiniMagick.convert do |convert|
-        files.each do |file|
+        images.each do |file|
           convert << file
         end
         convert << pdf_path
       end
     end
 
+    def images
+      files
+    end
+
     def pdf_path
-      @pdf_path ||= "#{download_dir}/#{filename}.pdf"
+      @pdf_path ||= "#{download_dir}/#{title}.pdf"
+    end
+  end
+
+  class Split < PDF
+    attr_accessor :images
+
+    def initialize(...)
+      super
+      @images = []
+    end
+
+    def create
+      return if files.empty?
+
+      logger.p 'split images...'
+
+      create_split_dir
+      files.each_with_index do |file, idx|
+        right_img = MiniMagick::Image.open(file)
+        if right_img.width == 1920
+          extname = File.extname(file)
+          basename = File.basename(file, extname)
+
+          right_img.crop('960x+960+0')
+          right_path = File.join(split_dir, "#{basename}-a#{extname}")
+          right_img.write(right_path)
+          images << right_path
+
+          logger.p "right: #{right_path}"
+
+          left_img = MiniMagick::Image.open(file)
+          left_img.crop('960x+0+0')
+          left_path = File.join(split_dir, "#{basename}-b#{extname}")
+          left_img.write(left_path)
+          images << left_path
+
+          logger.p "left : #{left_path}"
+        else
+          images << file
+        end
+      end
+
+      super
+    end
+
+    def split_dir
+      File.join(download_dir, volume_str, 'split')
+    end
+
+    def create_split_dir
+      FileUtils.mkdir_p split_dir
     end
   end
 end
